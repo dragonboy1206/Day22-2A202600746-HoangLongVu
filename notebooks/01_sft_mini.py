@@ -154,14 +154,14 @@ sft_config = SFTConfig(
     bf16=torch.cuda.is_bf16_supported(),
     fp16=not torch.cuda.is_bf16_supported(),
     seed=42,
-    max_seq_length=MAX_LEN,
+    max_length=MAX_LEN,
     dataset_text_field="text",
     report_to="none",
 )
 
 trainer = SFTTrainer(
     model=model,
-    tokenizer=tokenizer,
+    processing_class=tokenizer,
     args=sft_config,
     train_dataset=ds_formatted,
 )

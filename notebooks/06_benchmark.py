@@ -5,7 +5,10 @@
 # ---
 
 # %% [markdown]
-# # NB6 — LLM Benchmark: SFT-only vs SFT+DPO
+# # NB6 — LLM Benchmark: SFT-only vs SFT+DPO  (OPTIONAL / BONUS)
+#
+# > **Optional (bonus).** Core lab = NB1--NB4. This runs lm-eval (~30 min on T4)
+# > and is skip-friendly --- do it only if you want quantitative deltas.
 #
 # **Stack:** `lm-eval-harness` (IFEval, GSM8K, MMLU) + hand-rolled AlpacaEval-lite (judge-based).
 # Maps to deck §8.1–§8.5 (Đánh giá Alignment): static suites · judge-based suites · reward-model

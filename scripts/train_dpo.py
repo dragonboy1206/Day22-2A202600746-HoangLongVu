@@ -92,7 +92,7 @@ def main():
     pref = Dataset.from_parquet(args.pref_path)
     trainer = DPOTrainer(
         model=model, ref_model=None, args=config,
-        train_dataset=pref, tokenizer=tokenizer,
+        train_dataset=pref, processing_class=tokenizer,
     )
     train_result = trainer.train()
 

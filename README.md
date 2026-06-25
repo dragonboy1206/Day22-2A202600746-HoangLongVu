@@ -11,12 +11,12 @@ Build SFT-mini checkpoint → train DPO adapter → compare SFT-only vs SFT+DPO 
 
 | Tier | Compute | Base model | SFT slice | DPO slice | Time | Khi nào dùng |
 |---|---|---|---|---|---|---|
-| **T4 (default)** | Free Colab T4 16 GB / laptop GPU ≥ 12 GB | `Qwen2.5-3B-bnb-4bit` | 1k VN Alpaca | 2k UltraFeedback | ~75 min (incl. NB6 benchmark) | Hầu hết học viên — không Anthropic/OpenAI key, free Colab, RTX 3060/3070/4060 laptop |
-| **BigGPU (full)** | Colab Pro A100/L4 / Kaggle T4×2 / cloud H100 | `Qwen2.5-7B-bnb-4bit` | 1k VN Alpaca | 5k UltraFeedback | ~60 min (incl. NB6 benchmark) | Đã có cloud GPU, muốn faithful với deck demo (3.2 → 4.1 helpfulness, A100 timing) |
+| **T4 (default)** | Free Colab T4 16 GB / laptop GPU ≥ 12 GB | `Qwen2.5-3B-bnb-4bit` | 1k VN Alpaca | 2k UltraFeedback | ~30 min core (NB1-4) | Hầu hết học viên — không Anthropic/OpenAI key, free Colab, RTX 3060/3070/4060 laptop |
+| **BigGPU (full)** | Colab Pro A100/L4 / Kaggle T4×2 / cloud H100 | `Qwen2.5-7B-bnb-4bit` | 1k VN Alpaca | 5k UltraFeedback | ~25 min core (NB1-4) | Đã có cloud GPU, muốn faithful với deck demo (3.2 → 4.1 helpfulness, A100 timing) |
 
 > Cả hai tier dùng **cùng notebook source** — đổi giữa T4 và BigGPU bằng cách sửa `COMPUTE_TIER` trong `.env` (hoặc đổi badge launch URL bên dưới).
 
-> **VRAM math quan trọng:** DPO cần *cả policy và reference* model trong memory cùng lúc → ~2× SFT VRAM. Một 7B QLoRA SFT vừa 10 GB nhưng 7B QLoRA DPO cần ~18-20 GB. Đó là lý do T4 tier dùng 3B (không 7B) và BigGPU tier yêu cầu A100/L4.
+> **VRAM math quan trọng:** DPO chấm mỗi câu dưới *cả* policy và reference. Với PEFT/LoRA, TRL **không** nạp model thứ 2 -- nó tắt adapter để lấy reference forward pass trên cùng base 4-bit. VRAM cao hơn SFT là do **2 forward pass + giữ cả chosen lẫn rejected** trong batch (~1.5-2x activation memory của SFT), *không* phải vì 2 bản weights. Đó là lý do T4 tier dùng 3B (không 7B) và BigGPU tier yêu cầu A100/L4.
 
 ---
 
@@ -34,8 +34,8 @@ Click → Runtime → Change runtime type → **T4 GPU** → Run all.
 git clone https://github.com/<your-username>/Day22-Track3-DPO-Alignment-Lab.git
 cd Day22-Track3-DPO-Alignment-Lab
 bash setup-laptop.sh    # ~5 min — venv + deps + cuda probe + smoke test
-make smoke              # 2-step training run on each notebook to verify GPU
-make pipeline           # full pipeline: sft → data → dpo → eval → deploy (~45 min)
+make smoke              # import + GPU check (no training)
+make pipeline           # CORE: sft → data → dpo → eval (NB1-4, ~30 min)
 make verify             # pre-submission gatekeeper
 ```
 
@@ -46,16 +46,17 @@ Yêu cầu: **Python 3.10–3.12**, NVIDIA GPU ≥ 12 GB VRAM (3060/4060 trở l
 ```
 make help            Show this help
 make setup           Auto-detect Colab vs laptop, install deps + smoke check
-make smoke           2-step training run on each notebook to verify imports + GPU
+make smoke           Import + GPU check (scripts/verify.py --smoke)
 make sft             NB1 — build SFT-mini checkpoint (~10 min T4 / ~5 min A100)
 make data            NB2 — preference data prep (~2 min)
-make dpo             NB3 — full DPO training (~30 min T4 / ~20 min A100)
+make dpo             NB3 — DPO training (~15 min T4 / ~12 min A100)
 make eval            NB4 — side-by-side comparison + optional API judge
-make deploy          NB5 — merge + GGUF + llama.cpp smoke
-make bench           NB6 — IFEval/GSM8K/MMLU/AlpacaEval-lite + 4-bar plot (~30 min T4)
-make pipeline        Run NB1 → NB6 in order
+make pipeline        CORE: run NB1 → NB4 in order (~30 min T4)
+make deploy          NB5 (OPTIONAL) — merge + GGUF + llama.cpp smoke
+make bench           NB6 (OPTIONAL) — IFEval/GSM8K/MMLU + 4-bar plot (~30 min T4)
+make pipeline-full   Core + optional NB5 + NB6
 make beta-sweep      Bonus rigor: re-run NB3 with β ∈ {0.05, 0.1, 0.5}
-make verify          scripts/verify.py — pre-submission gatekeeper
+make verify          scripts/verify.py — gatekeeper (core passes without NB5/NB6)
 make clean           rm adapters/ data/pref/ gguf/ __pycache__
 ```
 
@@ -82,8 +83,8 @@ Hoặc Colab Pro / Kaggle: open `colab/Lab22_DPO_BigGPU.ipynb` (badge link sẽ 
 | `02_preference_data` | Load `argilla/ultrafeedback-binarized-preferences-cleaned`, format `prompt/chosen/rejected`, save Parquet | Bullet 2 — preference data ready | parquet written; chosen ≠ rejected; 3 examples printed |
 | `03_dpo_train` | TRL `DPOTrainer(beta=0.1, lr=5e-7)` on SFT model + frozen reference; plot reward curves | Bullet 3 — DPO training + reward curves | adapter saves; reward gap > 0; chosen reward ↑ (or ↓ explained per deck §3.4) |
 | `04_compare_and_eval` | 8 fixed prompts × {SFT, SFT+DPO} side-by-side; optional GPT-4o/Claude judge | Bullet 4 — helpfulness comparison | table renders; ≥ 8 examples; win/loss/tie counts reported |
-| `05_merge_deploy_gguf` | `merge_and_unload()` → GGUF Q4_K_M → llama-cpp-python smoke test | Bullet 5 — deployable artifact | GGUF < 5 GB; smoke prompt returns coherent VN |
-| `06_benchmark` | IFEval + GSM8K + MMLU (sampled) + AlpacaEval-lite on SFT-only vs SFT+DPO; 4-bar comparison plot | Bullet 6 — quantitative benchmark | `benchmark_results.json` written; 4 deltas annotated in plot; Reflection §7 explains alignment-tax pattern |
+| `05_merge_deploy_gguf` **(OPTIONAL)** | `merge_and_unload()` → GGUF Q4_K_M → llama-cpp-python smoke test | Bullet 5 — deployable artifact | GGUF < 5 GB; smoke prompt returns coherent VN |
+| `06_benchmark` **(OPTIONAL)** | IFEval + GSM8K + MMLU (sampled) + AlpacaEval-lite on SFT-only vs SFT+DPO; 4-bar comparison plot | Bullet 6 — quantitative benchmark | `benchmark_results.json` written; 4 deltas annotated in plot; Reflection §7 explains alignment-tax pattern |
 
 **Source format:** Notebooks live as Jupytext `.py` files (small, easy to review). `setup-laptop.sh` and `make smoke` auto-convert to `.ipynb`. Edit `.ipynb` in Jupyter and Jupytext keeps both in sync.
 
@@ -117,8 +118,8 @@ Mapping 1-to-1 với slide deliverable bullets:
 2. **NB2** — `data/pref/train.parquet` with prompt/chosen/rejected columns; 3 inspected examples printed.
 3. **NB3** — `adapters/dpo/` written; reward gap plot saved as `03_dpo_reward_curves.png`.
 4. **NB4** — `04_side_by_side_table.png` + win/loss/tie summary (8 prompts × 2 models).
-5. **NB5** — `gguf/lab22-dpo-Q4_K_M.gguf` exists; `06_gguf_smoke.png` shows llama.cpp output.
-6. **NB6** — `data/eval/benchmark_results.json` + `07-benchmark-comparison.png` 4-bar chart with deltas annotated; REFLECTION §7 interprets alignment-tax pattern (deck §8.1).
+5. **NB5 (OPTIONAL/bonus)** — `gguf/lab22-dpo-Q4_K_M.gguf` exists; `06_gguf_smoke.png` shows llama.cpp output.
+6. **NB6 (OPTIONAL/bonus)** — `data/eval/benchmark_results.json` + `07-benchmark-comparison.png` 4-bar chart with deltas annotated; REFLECTION §7 interprets alignment-tax pattern (deck §8.1).
 
 Chấm điểm: xem [`rubric.md`](rubric.md). **Tổng 100 pts → Track-3 Daily Lab (30%)** + 20 pts bonus rigor add-ons (β-sweep, HF push, W&B, GGUF release).
 

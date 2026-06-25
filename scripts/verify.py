@@ -120,7 +120,7 @@ def smoke_check(repo: Path) -> int:
             dev = torch.cuda.get_device_properties(0)
             print(f"  ✓ CUDA               {dev.name} ({dev.total_memory / 1e9:.1f} GB)")
         else:
-            problems.append("torch.cuda.is_available() == False — DPO needs GPU")
+            problems.append("torch.cuda.is_available() == False -- DPO needs a CUDA/ROCm GPU. Use the Colab T4 path (see HARDWARE-GUIDE.md); this local smoke gate cannot pass on CPU/Mac.")
     except ImportError as exc:
         problems.append(f"torch import failed: {exc}")
 
@@ -128,7 +128,8 @@ def smoke_check(repo: Path) -> int:
         try:
             __import__(mod)
             print(f"  ✓ {mod}")
-        except ImportError as exc:
+        except (ImportError, NotImplementedError, RuntimeError) as exc:
+            # unsloth raises NotImplementedError (not ImportError) when no GPU is present.
             problems.append(f"{mod} import failed: {exc}")
 
     # Deck source (sibling file)
@@ -207,24 +208,27 @@ def main() -> int:
     check_file(repo / "data" / "eval" / "judge_results.json",
                "judge results (NB4 output)", problems)
 
-    # GGUF
-    check_gguf(repo, problems)
+    # OPTIONAL (bonus) — NB5 GGUF + NB6 benchmark: report, do NOT fail core
+    optional = []
+    if not list((repo / "gguf").glob("*.gguf")):
+        optional.append("NB5 GGUF (gguf/*.gguf) not done")
+    if not (repo / "data" / "eval" / "benchmark_results.json").exists():
+        optional.append("NB6 benchmark (data/eval/benchmark_results.json) not done")
 
-    # NB6 benchmark outputs
-    check_file(repo / "data" / "eval" / "benchmark_results.json",
-               "benchmark results (NB6 output)", problems)
-    check_file(repo / "submission" / "screenshots" / "07-benchmark-comparison.png",
-               "benchmark comparison plot (NB6 output)", problems)
-
-    # Submission artifacts
+    # Submission artifacts (core)
     check_reflection_edited(repo / "submission" / "REFLECTION.md", problems)
-    n_shots = check_screenshots(repo / "submission" / "screenshots", min_count=6, problems=problems)
+    n_shots = check_screenshots(repo / "submission" / "screenshots", min_count=3, problems=problems)
     if n_shots:
         print(f"  ✓ submission/screenshots/ has {n_shots} image(s)")
 
+    if optional:
+        print("\nⓘ Optional (bonus) not done — fine for a core pass:")
+        for line in optional:
+            print(f"  - {line}")
+
     print()
     if not problems:
-        print("✓ All checks passed. Push your repo (public!) and paste the URL into LMS.")
+        print("✓ Core checks passed. Push your repo (public!) and paste the URL into LMS.")
         return 0
 
     print("✗ Submission not ready yet:\n")

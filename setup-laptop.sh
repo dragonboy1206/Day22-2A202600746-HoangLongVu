@@ -14,15 +14,24 @@ command -v python3 >/dev/null 2>&1 || { echo "[laptop] python3 not found. Instal
 PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 echo "[laptop] Python $PY_VER detected"
 case "$PY_VER" in
-  3.10|3.11|3.12) ;;
-  *) echo "[laptop] WARNING: Python $PY_VER may not work — Unsloth supports 3.10–3.12 only"; ;;
+  3.10|3.11|3.12) PYREQ="$PY_VER" ;;
+  *)
+    if command -v uv >/dev/null 2>&1; then
+      echo "[laptop] Python $PY_VER out of range (need 3.10-3.12) -- uv will fetch 3.12 for the venv"
+      PYREQ="3.12"
+    else
+      echo "[laptop] ERROR: Python $PY_VER unsupported -- Unsloth needs 3.10-3.12."
+      echo "[laptop]   Install uv (https://docs.astral.sh/uv/) and rerun (auto-fetches 3.12), or use pyenv."
+      exit 1
+    fi
+    ;;
 esac
 
 # ── 2. venv ─────────────────────────────────────────────────────────────
 if [ ! -d ".venv" ]; then
   if command -v uv >/dev/null 2>&1; then
     echo "[laptop] Creating venv with uv (faster)"
-    uv venv .venv --python "$PY_VER"
+    uv venv .venv --python "$PYREQ"
   else
     echo "[laptop] Creating venv with python -m venv"
     python3 -m venv .venv

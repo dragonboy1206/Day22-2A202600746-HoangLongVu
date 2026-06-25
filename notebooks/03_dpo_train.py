@@ -38,7 +38,7 @@ else:
     PER_DEVICE_BATCH = 1
     GRAD_ACCUM = 4
 
-# Hyperparameters from deck §5.2 lines 849–886
+# Hyperparameters from deck §5.2 (TRL DPOTrainer implementation frame)
 BETA = float(os.environ.get("DPO_BETA", "0.1"))
 LR = float(os.environ.get("DPO_LR", "5e-7"))
 EPOCHS = int(os.environ.get("DPO_EPOCHS", "1"))
@@ -67,11 +67,13 @@ import torch
 assert torch.cuda.is_available(), "DPO needs a CUDA GPU. See HARDWARE-GUIDE.md."
 
 # %% [markdown]
-# ## 1. Load policy + reference (the VRAM-doubling part)
+# ## 1. Load policy + reference (the VRAM story)
 #
-# **Critical:** DPO needs the policy (trainable) AND a frozen reference (no grad).
-# The reference is the SFT model at step 0; we load it twice. Unsloth's 4-bit base
-# is shared across copies — only the LoRA adapter differs.
+# **Critical:** DPO scores each answer under the policy (trainable) AND a frozen
+# reference. With PEFT we do **not** load a second model -- TRL toggles the LoRA
+# adapter *off* to get the reference forward pass on the same 4-bit base. The
+# extra VRAM vs SFT comes from two forward passes + holding chosen AND rejected
+# sequences, not from a second copy of the weights.
 
 # %%
 from unsloth import FastLanguageModel
@@ -167,7 +169,7 @@ trainer = DPOTrainer(
     ref_model=None,                # auto-derived from PEFT base
     args=dpo_config,
     train_dataset=pref_ds,
-    tokenizer=tokenizer,
+    processing_class=tokenizer,
 )
 
 # %%

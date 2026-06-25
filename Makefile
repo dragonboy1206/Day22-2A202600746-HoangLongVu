@@ -39,7 +39,7 @@ smoke: ## 2-step training run on each notebook to verify imports + GPU
 	@$(PY) scripts/verify.py --smoke
 
 # ─────────────────────────────────────────────────────────────
-# Pipeline — 5 notebooks in order
+# Pipeline — core NB1-NB4 (NB5/NB6 optional via pipeline-full)
 # ─────────────────────────────────────────────────────────────
 
 sft: ## NB1 — build SFT-mini checkpoint (~10 min T4 / ~5 min A100)
@@ -58,15 +58,17 @@ eval: ## NB4 — side-by-side comparison + judge
 	@$(JUPYTEXT) --to notebook --update notebooks/04_compare_and_eval.py
 	@$(JUPYTER) nbconvert --to notebook --execute --inplace notebooks/04_compare_and_eval.ipynb
 
-deploy: ## NB5 — merge + GGUF + llama.cpp smoke
+deploy: ## NB5 (OPTIONAL/bonus) — merge + GGUF + llama.cpp smoke
 	@$(JUPYTEXT) --to notebook --update notebooks/05_merge_deploy_gguf.py
 	@$(JUPYTER) nbconvert --to notebook --execute --inplace notebooks/05_merge_deploy_gguf.ipynb
 
-bench: ## NB6 — run IFEval/GSM8K/MMLU/AlpacaEval-lite + 4-bar plot (~30 min T4)
+bench: ## NB6 (OPTIONAL/bonus) — IFEval/GSM8K/MMLU + 4-bar plot (~30 min T4)
 	@$(JUPYTEXT) --to notebook --update notebooks/06_benchmark.py
 	@$(JUPYTER) nbconvert --to notebook --execute --inplace notebooks/06_benchmark.ipynb
 
-pipeline: sft data dpo eval deploy bench ## Run all 6 notebooks in order
+pipeline: sft data dpo eval ## Run the 4 CORE notebooks (NB1-NB4, ~30 min T4)
+
+pipeline-full: sft data dpo eval deploy bench ## Core + OPTIONAL NB5 (GGUF) + NB6 (benchmark)
 
 # ─────────────────────────────────────────────────────────────
 # Bonus rigor add-on (+6 pts)
@@ -101,4 +103,4 @@ clean: ## Wipe adapters/, data/pref/, gguf/, __pycache__
 clean-all: clean ## Wipe everything including venv + HF cache
 	rm -rf $(VENV) ~/.cache/huggingface/hub
 
-.PHONY: help setup smoke sft data dpo eval deploy bench pipeline beta-sweep verify lab test clean clean-all
+.PHONY: help setup smoke sft data dpo eval deploy bench pipeline pipeline-full beta-sweep verify lab test clean clean-all

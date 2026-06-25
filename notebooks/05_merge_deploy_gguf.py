@@ -5,7 +5,10 @@
 # ---
 
 # %% [markdown]
-# # NB5 — Merge + Deploy + GGUF
+# # NB5 — Merge + Deploy + GGUF  (OPTIONAL / BONUS)
+#
+# > **Optional (bonus).** Core lab = NB1--NB4. GGUF export builds llama.cpp at
+# > runtime and is the most fragile step --- skip on free Colab T4 if short on time.
 #
 # **Stack:** Unsloth `merge_and_unload` + `save_pretrained_gguf(quantization='Q4_K_M')`
 # + llama-cpp-python smoke test.
