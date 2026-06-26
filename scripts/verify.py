@@ -151,12 +151,12 @@ def smoke_check(repo: Path) -> int:
         else:
             problems.append(f"missing notebook {nb_dir / nb}")
 
-    # NB6 benchmark dependency check
+    # NB6 benchmark dependency check (optional)
     try:
         import lm_eval  # noqa: F401
         print(f"  ✓ lm_eval (NB6 benchmark suite)")
     except ImportError:
-        problems.append("lm_eval missing — pip install -r requirements.txt (NB6 will fail)")
+        print("  ⚠ lm_eval not installed (optional; install requirements-optional.txt for NB6)")
 
     print()
     if problems:

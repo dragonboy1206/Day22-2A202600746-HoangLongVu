@@ -1,0 +1,15 @@
+# Optional packages for late notebook stages.
+#
+# Install these only when you really run NB5/NB6. They are not needed for
+# SFT, preference-data prep, DPO training, or side-by-side evaluation.
+
+# NB5: GGUF smoke test through llama.cpp.
+# On Colab this package may compile from source, so it can take a long time.
+llama-cpp-python>=0.3,<1.0
+
+# NB6: benchmark suite for IFEval / GSM8K / MMLU.
+lm-eval[ifeval,math]>=0.4.5,<1.0
+
+# Local notebook tooling, not required inside Colab.
+jupyterlab>=4.3,<5.0
+jupytext>=1.16,<2.0

@@ -59,14 +59,11 @@ def main():
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    model = PeftModel.from_pretrained(model, args.sft_path, is_trainable=True)
-    model = FastLanguageModel.get_peft_model(
-        model, r=16, lora_alpha=32, lora_dropout=0.0, bias="none",
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
-                        "gate_proj", "up_proj", "down_proj"],
-        use_gradient_checkpointing="unsloth",
-        random_state=42, use_rslora=False, loftq_config=None,
+    model = PeftModel.from_pretrained(
+        model, args.sft_path, adapter_name="default", is_trainable=True,
     )
+    model.load_adapter(args.sft_path, adapter_name="reference", is_trainable=False)
+    model.set_adapter("default")
 
     config = DPOConfig(
         output_dir=str(output.parent / f"{output.name}-checkpoints"),
@@ -87,6 +84,8 @@ def main():
         seed=42,
         loss_type="sigmoid",
         report_to="none",
+        model_adapter_name="default",
+        ref_adapter_name="reference",
     )
 
     pref = Dataset.from_parquet(args.pref_path)
@@ -96,7 +95,8 @@ def main():
     )
     train_result = trainer.train()
 
-    trainer.model.save_pretrained(str(output))
+    trainer.model.set_adapter("default")
+    trainer.model.save_pretrained(str(output), selected_adapters=["default"])
     tokenizer.save_pretrained(str(output))
 
     # Headline metrics

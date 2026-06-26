@@ -79,7 +79,9 @@ assert torch.cuda.is_available(), "DPO needs a CUDA GPU. See HARDWARE-GUIDE.md."
 from unsloth import FastLanguageModel
 from peft import PeftModel
 
-# Policy — gets new DPO LoRA adapter on top of SFT LoRA
+# Load the 4-bit base once. PEFT then attaches two copies of the SFT adapter:
+# - default: trainable policy adapter, updated by DPO
+# - reference: frozen SFT adapter, used by DPO as the comparison baseline
 model, tokenizer = FastLanguageModel.from_pretrained(
     model_name=BASE_MODEL,
     max_seq_length=MAX_LEN,
@@ -89,29 +91,26 @@ model, tokenizer = FastLanguageModel.from_pretrained(
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
-# Load SFT adapter on top of base
-model = PeftModel.from_pretrained(model, str(SFT_PATH), is_trainable=True)
-print(f"Policy: {model.__class__.__name__} with SFT adapter loaded")
+model = PeftModel.from_pretrained(
+    model,
+    str(SFT_PATH),
+    adapter_name="default",
+    is_trainable=True,
+)
+model.load_adapter(
+    str(SFT_PATH),
+    adapter_name="reference",
+    is_trainable=False,
+)
+model.set_adapter("default")
+print("Loaded SFT adapter twice: trainable policy='default', frozen reference='reference'.")
 
 # %%
-# Wrap policy with NEW LoRA adapter for DPO updates (don't merge SFT — keep stacked)
-# Unsloth re-applies LoRA on top of the existing PeftModel.
-model = FastLanguageModel.get_peft_model(
-    model,
-    r=16,
-    lora_alpha=32,
-    lora_dropout=0.0,
-    bias="none",
-    target_modules=[
-        "q_proj", "k_proj", "v_proj", "o_proj",
-        "gate_proj", "up_proj", "down_proj",
-    ],
-    use_gradient_checkpointing="unsloth",
-    random_state=42,
-    use_rslora=False,
-    loftq_config=None,
-)
-print(f"Trainable params (DPO LoRA): {sum(p.numel() for p in model.parameters() if p.requires_grad):,}")
+# Keep the trainable policy adapter active. Do not call get_peft_model() again here:
+# the SFT LoRA adapter already exists, and DPO should continue training from it.
+model.set_adapter("default")
+trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+print(f"Trainable params (DPO updates on SFT LoRA): {trainable:,}")
 
 # %% [markdown]
 # > **Why no separate `ref_model=` argument?** Modern TRL (≥ 0.12) auto-detects
@@ -124,6 +123,13 @@ print(f"Trainable params (DPO LoRA): {sum(p.numel() for p in model.parameters() 
 
 # %%
 from trl import DPOConfig
+import inspect
+
+_dpo_params = inspect.signature(DPOConfig.__init__).parameters
+assert "model_adapter_name" in _dpo_params and "ref_adapter_name" in _dpo_params, (
+    "Installed TRL is too old for adapter-based DPO reference handling. "
+    "Restart Colab and rerun the install cell, or install trl>=0.15,<0.20."
+)
 
 dpo_config = DPOConfig(
     output_dir=str(DPO_OUT.parent / "dpo-checkpoints"),
@@ -144,6 +150,8 @@ dpo_config = DPOConfig(
     seed=42,
     loss_type="sigmoid",         # DPO standard (alternatives: ipo, hinge, kto)
     report_to="none",
+    model_adapter_name="default",
+    ref_adapter_name="reference",
 )
 
 print(f"DPOConfig: beta={dpo_config.beta}  lr={dpo_config.learning_rate}  loss_type={dpo_config.loss_type}")
@@ -237,6 +245,10 @@ plt.show()
 # Read this cell carefully — it tells you which kind of "reward gap up" you got.
 
 # %%
+last_chosen = None
+last_rejected = None
+last_gap = None
+
 if chosen_col and rejected_col and len(logs) >= 5:
     last_chosen = logs[chosen_col].iloc[-5:].mean()
     last_rejected = logs[rejected_col].iloc[-5:].mean()
@@ -263,12 +275,15 @@ if chosen_col and rejected_col and len(logs) >= 5:
         print("✓ INTENDED: chosen reward UP and gap positive. Classic DPO success.")
     else:
         print("?  AMBIGUOUS: weak chosen movement + positive gap. Try longer training or higher lr.")
+else:
+    print("Not enough reward log rows to summarize the last 5 steps.")
 
 # %% [markdown]
 # ## 6. Save adapter
 
 # %%
-trainer.model.save_pretrained(str(DPO_OUT))
+trainer.model.set_adapter("default")
+trainer.model.save_pretrained(str(DPO_OUT), selected_adapters=["default"])
 tokenizer.save_pretrained(str(DPO_OUT))
 print(f"Saved DPO adapter to {DPO_OUT}")
 
@@ -282,9 +297,9 @@ metrics = {
     "lr": LR,
     "epochs": EPOCHS,
     "final_train_loss": float(train_result.training_loss),
-    "end_chosen_reward": float(last_chosen) if chosen_col else None,
-    "end_rejected_reward": float(last_rejected) if rejected_col else None,
-    "end_reward_gap": float(last_gap) if chosen_col and rejected_col else None,
+    "end_chosen_reward": float(last_chosen) if last_chosen is not None else None,
+    "end_rejected_reward": float(last_rejected) if last_rejected is not None else None,
+    "end_reward_gap": float(last_gap) if last_gap is not None else None,
 }
 (DPO_OUT / "dpo_metrics.json").write_text(json.dumps(metrics, indent=2))
 print(f"Wrote metrics to {DPO_OUT / 'dpo_metrics.json'}")

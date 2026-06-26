@@ -68,10 +68,10 @@ model, tokenizer = FastLanguageModel.from_pretrained(
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
-# Stack SFT-mini → DPO adapters
-SFT_PATH = REPO_ROOT / "adapters" / "sft-mini"
-model = PeftModel.from_pretrained(model, str(SFT_PATH))
-print(f"Loaded SFT-mini adapter from {SFT_PATH}")
+# DPO_PATH already contains the final policy adapter: SFT weights continued with DPO.
+# Loading SFT_PATH here would merge the wrong adapter.
+model = PeftModel.from_pretrained(model, str(DPO_PATH))
+print(f"Loaded final DPO adapter from {DPO_PATH}")
 
 # %% [markdown]
 # > **Note:** The DPO adapter trained in NB3 stacks on top of SFT. To get a fully
@@ -86,7 +86,7 @@ print(f"Loaded SFT-mini adapter from {SFT_PATH}")
 # converter in step 3.
 
 # %%
-# This re-loads the model with both SFT and DPO adapters merged into base weights.
+# Merge the final DPO policy adapter into base weights.
 # Output is FP16 (or BF16 on Ampere+) HF-format weights ready for inference.
 model.save_pretrained_merged(
     str(MERGED_PATH),

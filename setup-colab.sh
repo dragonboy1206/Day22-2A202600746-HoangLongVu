@@ -11,7 +11,7 @@
 set -euo pipefail
 
 echo "[colab] Day 22 lab — Colab setup"
-echo "[colab] Stack: unsloth + trl + peft + bitsandbytes + llama-cpp-python"
+echo "[colab] Stack: unsloth + trl + peft + bitsandbytes (core training)"
 echo
 
 # ── 1. Auto-detect tier from torch.cuda ─────────────────────────────────
@@ -49,8 +49,12 @@ if [ "$TIER" = "BIGGPU" ]; then
   pip install -q -r requirements-biggpu.txt || echo "[colab] WARNING: vllm/flash-attn install failed; vLLM cell in NB5 will skip"
 fi
 
-# ── 3. Convert Jupytext sources ─────────────────────────────────────────
-jupytext --to notebook --update notebooks/*.py 2>/dev/null || jupytext --to notebook notebooks/*.py
+# ── 3. Convert Jupytext sources, if the optional tool is available ───────
+if command -v jupytext >/dev/null 2>&1; then
+  jupytext --to notebook --update notebooks/*.py 2>/dev/null || jupytext --to notebook notebooks/*.py
+else
+  echo "[colab] jupytext not installed; skipping .py -> .ipynb conversion"
+fi
 
 # ── 4. .env scaffold (optional in Colab) ────────────────────────────────
 [ -f .env ] || cp .env.example .env
