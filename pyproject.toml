@@ -8,6 +8,8 @@ readme = "README.md"
 # T4 baseline (mirrors requirements.txt). `uv pip install -e .` is faster
 # than venv+pip; both work.
 dependencies = [
+    "setuptools<82",
+    "jedi>=0.16",
     "unsloth>=2025.10,<2026.5",
     "transformers>=4.56,<4.57",
     "trl>=0.15,<0.20",

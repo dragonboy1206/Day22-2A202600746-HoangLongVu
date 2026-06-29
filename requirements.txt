@@ -5,6 +5,8 @@
 # ── Core training stack ───────────────────────────────────────
 # Unsloth bundles patched transformers + bitsandbytes + xformers — its version
 # pin is what locks the Unsloth + TRL compatibility matrix. Bump together.
+setuptools<82                              # torch 2.11 can reject setuptools 82+
+jedi>=0.16                                 # IPython 7.x dependency on Colab
 unsloth>=2025.10,<2026.5                # patched kernels for 7B-on-T4
 transformers>=4.56,<4.57
 trl>=0.15,<0.20                         # DPOTrainer + adapter-based DPO reference
